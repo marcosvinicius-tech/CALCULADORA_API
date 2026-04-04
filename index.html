@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora API - Frontend</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 350px;
+        }
+        h2 { text-align: center; color: #1a73e8; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; }
+        input, select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover { background-color: #1557b0; }
+        #resultado-box {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 4px;
+            text-align: center;
+            display: none;
+        }
+        .success { background-color: #e6f4ea; color: #1e8e3e; border: 1px solid #ceead6; }
+        .error { background-color: #fce8e6; color: #d93025; border: 1px solid #fad2cf; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Calculadora API</h2>
+        <div class="form-group">
+            <label for="n1">Número 1</label>
+            <input type="number" id="n1" placeholder="Ex: 10">
+        </div>
+        <div class="form-group">
+            <label for="n2">Número 2</label>
+            <input type="number" id="n2" placeholder="Ex: 5">
+        </div>
+        <div class="form-group">
+            <label for="operacao">Operação</label>
+            <select id="operacao">
+                <option value="somar">Soma (+)</option>
+                <option value="subtrair">Subtração (-)</option>
+                <option value="multiplicar">Multiplicação (*)</option>
+                <option value="dividir">Divisão (/)</option>
+                <option value="potencia">Potência (^)</option>
+                <option value="raiz">Raiz Quadrada (√ de N1)</option>
+            </select>
+        </div>
+        <button onclick="calcular()">Calcular</button>
+
+        <div id="resultado-box">
+            <strong>Resultado:</strong> <span id="resultado-valor"></span>
+        </div>
+    </div>
+
+    <script>
+        async function calcular() {
+            const n1 = parseFloat(document.getElementById('n1').value);
+            const n2 = parseFloat(document.getElementById('n2').value);
+            const op = document.getElementById('operacao').value;
+            const resBox = document.getElementById('resultado-box');
+            const resValor = document.getElementById('resultado-valor');
+
+            if (isNaN(n1) || (op !== 'raiz' && isNaN(n2))) {
+                alert("Por favor, preencha os números corretamente.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:8000/${op}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numero1: n1, numero2: n2 })
+                });
+
+                const data = await response.json();
+
+                resBox.style.display = 'block';
+                if (response.ok) {
+                    resBox.className = 'success';
+                    resValor.innerText = data.resultado;
+                } else {
+                    resBox.className = 'error';
+                    resValor.innerText = data.detail || "Erro no cálculo";
+                }
+            } catch (error) {
+                resBox.style.display = 'block';
+                resBox.className = 'error';
+                resValor.innerText = "Erro ao conectar com a API";
+            }
+        }
+    </script>
+</body>
+</html>
