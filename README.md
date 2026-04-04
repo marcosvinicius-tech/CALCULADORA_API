@@ -60,4 +60,6 @@ python test_client.py
 ```
 
 ---
-Desenvolvido por [Seu Nome]
+### 👥 Desenvolvedores
+- [Marcos Vinicius](https://github.com/marcosvinicius-tech)
+- [Guilherme Henrique Celistrino Capristo](https://github.com/GuiCapristo)
