@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -9,8 +9,9 @@ import math
 import os
 
 # --- Configuração do Banco de Dados (Nível Intermediário) ---
-SQLALCHEMY_DATABASE_URL = "sqlite:///./calculadora.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./calculadora.db")
+connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -41,18 +42,25 @@ app = FastAPI(
 )
 
 # --- Configuração de CORS (Nível Intermediário) ---
+cors_origins_env = os.getenv("CORS_ORIGINS", "*").strip()
+cors_origins = ["*"] if cors_origins_env == "*" else [o.strip() for o in cors_origins_env.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Habilitado para qualquer FrontEnd
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # --- Modelos de Dados ---
-class OperacaoRequest(BaseModel):
+class OperacaoDoisNumerosRequest(BaseModel):
     numero1: float
     numero2: float
+
+class OperacaoUmNumeroRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    numero1: float
 
 class OperacaoUpdate(BaseModel):
     numero1: float | None = None
@@ -63,12 +71,22 @@ class OperacaoUpdate(BaseModel):
 class ResultadoResponse(BaseModel):
     operacao: str
     numero1: float
-    numero2: float
+    numero2: float | None
+    resultado: float
+    data_hora: datetime.datetime
+
+class CalculoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    operacao: str
+    numero1: float
+    numero2: float | None
     resultado: float
     data_hora: datetime.datetime
 
 # --- Função Auxiliar para Salvar Histórico ---
-def salvar_historico(db: Session, operacao: str, n1: float, n2: float, res: float):
+def salvar_historico(db: Session, operacao: str, n1: float, n2: float | None, res: float):
     db_calculo = CalculoDB(operacao=operacao, numero1=n1, numero2=n2, resultado=res)
     db.add(db_calculo)
     db.commit()
@@ -81,11 +99,17 @@ def salvar_historico(db: Session, operacao: str, n1: float, n2: float, res: floa
 def raiz():
     return {"mensagem": "Bem-vindo a Calculadora API Intermediária!", "docs": "/docs"}
 
-@app.get("/historico")
-def ver_historico(db: Session = Depends(get_db)):
-    return db.query(CalculoDB).order_by(CalculoDB.data_hora.desc()).all()
+@app.get("/historico", response_model=list[CalculoResponse])
+def ver_historico(limit: int = 100, offset: int = 0, db: Session = Depends(get_db)):
+    return (
+        db.query(CalculoDB)
+        .order_by(CalculoDB.data_hora.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
 
-@app.put("/historico/{id}")
+@app.put("/historico/{id}", response_model=CalculoResponse)
 def atualizar_calculo(id: int, dados: OperacaoUpdate, db: Session = Depends(get_db)):
     db_calculo = db.query(CalculoDB).filter(CalculoDB.id == id).first()
     if not db_calculo:
@@ -115,7 +139,7 @@ def limpar_historico(db: Session = Depends(get_db)):
     return {"mensagem": "Historico limpo com sucesso"}
 
 @app.post("/somar", response_model=ResultadoResponse)
-def somar(dados: OperacaoRequest, db: Session = Depends(get_db)):
+def somar(dados: OperacaoDoisNumerosRequest, db: Session = Depends(get_db)):
     resultado = dados.numero1 + dados.numero2
     db_calculo = salvar_historico(db, "soma", dados.numero1, dados.numero2, resultado)
     return ResultadoResponse(
@@ -127,7 +151,7 @@ def somar(dados: OperacaoRequest, db: Session = Depends(get_db)):
     )
 
 @app.post("/subtrair", response_model=ResultadoResponse)
-def subtrair(dados: OperacaoRequest, db: Session = Depends(get_db)):
+def subtrair(dados: OperacaoDoisNumerosRequest, db: Session = Depends(get_db)):
     resultado = dados.numero1 - dados.numero2
     db_calculo = salvar_historico(db, "subtracao", dados.numero1, dados.numero2, resultado)
     return ResultadoResponse(
@@ -139,7 +163,7 @@ def subtrair(dados: OperacaoRequest, db: Session = Depends(get_db)):
     )
 
 @app.post("/multiplicar", response_model=ResultadoResponse)
-def multiplicar(dados: OperacaoRequest, db: Session = Depends(get_db)):
+def multiplicar(dados: OperacaoDoisNumerosRequest, db: Session = Depends(get_db)):
     resultado = dados.numero1 * dados.numero2
     db_calculo = salvar_historico(db, "multiplicacao", dados.numero1, dados.numero2, resultado)
     return ResultadoResponse(
@@ -151,7 +175,7 @@ def multiplicar(dados: OperacaoRequest, db: Session = Depends(get_db)):
     )
 
 @app.post("/dividir", response_model=ResultadoResponse)
-def dividir(dados: OperacaoRequest, db: Session = Depends(get_db)):
+def dividir(dados: OperacaoDoisNumerosRequest, db: Session = Depends(get_db)):
     if dados.numero2 == 0:
         raise HTTPException(status_code=400, detail="Divisao por zero nao e permitida!")
     resultado = dados.numero1 / dados.numero2
@@ -165,7 +189,7 @@ def dividir(dados: OperacaoRequest, db: Session = Depends(get_db)):
     )
 
 @app.post("/potencia", response_model=ResultadoResponse)
-def potencia(dados: OperacaoRequest, db: Session = Depends(get_db)):
+def potencia(dados: OperacaoDoisNumerosRequest, db: Session = Depends(get_db)):
     resultado = math.pow(dados.numero1, dados.numero2)
     db_calculo = salvar_historico(db, "potencia", dados.numero1, dados.numero2, resultado)
     return ResultadoResponse(
@@ -177,21 +201,38 @@ def potencia(dados: OperacaoRequest, db: Session = Depends(get_db)):
     )
 
 @app.post("/raiz", response_model=ResultadoResponse)
-def raiz_quadrada(dados: OperacaoRequest, db: Session = Depends(get_db)):
+def raiz_quadrada(dados: OperacaoUmNumeroRequest, db: Session = Depends(get_db)):
     if dados.numero1 < 0:
         raise HTTPException(status_code=400, detail="Raiz quadrada de numero negativo nao permitida no conjunto dos reais!")
     resultado = math.sqrt(dados.numero1)
-    db_calculo = salvar_historico(db, "raiz", dados.numero1, dados.numero2, resultado)
+    db_calculo = salvar_historico(db, "raiz", dados.numero1, None, resultado)
     return ResultadoResponse(
         operacao="raiz",
         numero1=dados.numero1,
-        numero2=dados.numero2,
+        numero2=None,
         resultado=resultado,
         data_hora=db_calculo.data_hora
     )
 
+@app.get("/operacoes")
+def listar_operacoes():
+    return {
+        "post": [
+            {"endpoint": "/somar", "operacao": "soma", "usa_numero2": True},
+            {"endpoint": "/subtrair", "operacao": "subtracao", "usa_numero2": True},
+            {"endpoint": "/multiplicar", "operacao": "multiplicacao", "usa_numero2": True},
+            {"endpoint": "/dividir", "operacao": "divisao", "usa_numero2": True},
+            {"endpoint": "/potencia", "operacao": "potencia", "usa_numero2": True},
+            {"endpoint": "/raiz", "operacao": "raiz", "usa_numero2": False},
+        ],
+        "get": [
+            {"endpoint": "/calcular", "operacoes": ["soma", "subtracao", "multiplicacao", "divisao", "potencia", "raiz"]},
+            {"endpoint": "/historico", "descricao": "lista historico com paginacao (limit/offset)"},
+        ],
+    }
+
 @app.get("/calcular")
-def calcular_query(numero1: float, numero2: float, operacao: str, db: Session = Depends(get_db)):
+def calcular_query(numero1: float, operacao: str, numero2: float | None = None, db: Session = Depends(get_db)):
     operacoes = {
         "soma": lambda a, b: a + b,
         "subtracao": lambda a, b: a - b,
@@ -205,17 +246,19 @@ def calcular_query(numero1: float, numero2: float, operacao: str, db: Session = 
             status_code=400,
             detail=f"Operacao invalida. Use: {list(operacoes.keys())}"
         )
+    if operacao != "raiz" and numero2 is None:
+        raise HTTPException(status_code=400, detail="numero2 e obrigatorio para esta operacao!")
     if operacao == "divisao" and numero2 == 0:
         raise HTTPException(status_code=400, detail="Divisao por zero!")
     if operacao == "raiz" and numero1 < 0:
         raise HTTPException(status_code=400, detail="Raiz de numero negativo!")
 
     resultado = operacoes[operacao](numero1, numero2)
-    salvar_historico(db, operacao, numero1, numero2, resultado)
+    salvar_historico(db, operacao, numero1, numero2 if operacao != "raiz" else None, resultado)
     
     return {
         "operacao": operacao,
         "numero1": numero1,
-        "numero2": numero2,
+        "numero2": numero2 if operacao != "raiz" else None,
         "resultado": resultado
     }

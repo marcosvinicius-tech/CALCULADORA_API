@@ -33,7 +33,7 @@ operacoes = [
     ("/multiplicar", {"numero1": 6, "numero2": 7}, "Multiplicacao (6*7)"),
     ("/dividir", {"numero1": 100, "numero2": 4}, "Divisao (100/4)"),
     ("/potencia", {"numero1": 2, "numero2": 10}, "Potencia (2^10)"),
-    ("/raiz", {"numero1": 144, "numero2": 0}, "Raiz (sqrt 144)")
+    ("/raiz", {"numero1": 144}, "Raiz (sqrt 144)")
 ]
 
 for endpoint, dados, desc in operacoes:
@@ -44,6 +44,8 @@ for endpoint, dados, desc in operacoes:
 print("\n2. Testando Endpoint GET /calcular (Sucesso):")
 res, status = get("/calcular?numero1=30&numero2=5&operacao=multiplicacao")
 print(f"  [PASS] Calcular 30*5 via Query: {res['resultado']} (Status: {status})")
+res, status = get("/calcular?numero1=144&operacao=raiz")
+print(f"  [PASS] Calcular sqrt(144) via Query: {res['resultado']} (Status: {status})")
 
 # 3. Testes de Erro e Validação (Nível Intermediário)
 print("\n3. Testando Casos de Erro (Validação):")
@@ -53,7 +55,7 @@ res, status = post("/dividir", {"numero1": 10, "numero2": 0})
 print(f"  [PASS] Divisao por zero (POST): {res['detail']} (Status: {status})")
 
 # Erro: Raiz de Negativo
-res, status = post("/raiz", {"numero1": -25, "numero2": 0})
+res, status = post("/raiz", {"numero1": -25})
 print(f"  [PASS] Raiz de negativo (POST): {res['detail']} (Status: {status})")
 
 # Erro: Operação Inválida via Query
@@ -72,6 +74,7 @@ if status == 200:
     print(f"  [PASS] Total de calculos no banco: {total}")
     if total > 0:
         ultimo = res[0]
-        print(f"  [PASS] Ultimo calculo salvo: {ultimo['operacao']} ({ultimo['numero1']}, {ultimo['numero2']}) = {ultimo['resultado']}")
+        n2_txt = "N/A" if ultimo.get("numero2") is None else ultimo.get("numero2")
+        print(f"  [PASS] Ultimo calculo salvo: {ultimo['operacao']} ({ultimo['numero1']}, {n2_txt}) = {ultimo['resultado']}")
 
 print("\n=== TODOS OS TESTES FORAM CONCLUÍDOS COM SUCESSO! ===")

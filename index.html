@@ -60,7 +60,7 @@
             <label for="n1">Número 1</label>
             <input type="number" id="n1" placeholder="Ex: 10">
         </div>
-        <div class="form-group">
+        <div class="form-group" id="n2-group">
             <label for="n2">Número 2</label>
             <input type="number" id="n2" placeholder="Ex: 5">
         </div>
@@ -82,7 +82,21 @@
         </div>
     </div>
 
-    <script>
+        <script>
+            function atualizarCampoNumero2() {
+                const op = document.getElementById('operacao').value;
+                const grupoN2 = document.getElementById('n2-group');
+                const inputN2 = document.getElementById('n2');
+                const usaN2 = op !== 'raiz';
+
+                grupoN2.style.display = usaN2 ? 'block' : 'none';
+                inputN2.disabled = !usaN2;
+                if (!usaN2) inputN2.value = '';
+            }
+
+            document.getElementById('operacao').addEventListener('change', atualizarCampoNumero2);
+            atualizarCampoNumero2();
+
         async function calcular() {
             const n1 = parseFloat(document.getElementById('n1').value);
             const n2 = parseFloat(document.getElementById('n2').value);
@@ -96,10 +110,11 @@
             }
 
             try {
+                const payload = op === 'raiz' ? { numero1: n1 } : { numero1: n1, numero2: n2 };
                 const response = await fetch(`http://localhost:8000/${op}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ numero1: n1, numero2: n2 })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
